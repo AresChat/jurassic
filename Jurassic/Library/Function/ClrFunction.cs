@@ -21,6 +21,24 @@ namespace Jurassic.Library
         //     INITIALIZATION
         //_________________________________________________________________________________________
 
+
+        /// <summary>
+        /// Creates a new instance of a function which calls the given delegate with JSFunctionFlags parameter
+        /// </summary>
+        /// <param name="prototype">The next object in the prototype chain.</param>
+        /// <param name="delegateToCall">The delegate to call.</param>
+        /// <param name="flags">Function flags to pass to the JS binder</param>
+        /// <param name="name">The name of the function.  Pass <c>null</c> to use the name of the delegate for the function name.</param>
+        /// <param name="length">The "typical" number of arguments expected by the function.  Pass <c>-1</c> to use the number of arguments expected by the delegate.</param>
+        internal ClrFunction(ObjectInstance prototype, Delegate delegateToCall, JSFunctionFlags flags, string name = null, int length = -1) : base(prototype)
+        {
+            JSBinderMethod[] jSBinderMethod = new JSBinderMethod[] { new JSBinderMethod(delegateToCall.Method, flags) };
+            this.callBinder = new JSBinder(jSBinderMethod);
+            this.thisBinding = delegateToCall.Target;
+            base.FastSetProperty("name", (name != null ? name : this.callBinder.Name), PropertyAttributes.Sealed, false);
+            base.FastSetProperty("length", this.callBinder.FunctionLength, PropertyAttributes.Sealed, false);
+        }
+
         /// <summary>
         /// Creates a new instance of a built-in constructor function.
         /// </summary>

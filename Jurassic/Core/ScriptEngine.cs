@@ -3,6 +3,8 @@ using System.Collections.Generic;
 using Jurassic.Library;
 using Jurassic.Compiler;
 using System.ComponentModel;
+using System.Linq;
+using System.Linq.Expressions;
 
 namespace Jurassic
 {
@@ -17,6 +19,8 @@ namespace Jurassic
 
         // The initial hidden class schema.
         private HiddenClassSchema emptySchema;
+
+        private object userData; 
 
         // The built-in objects.
         private GlobalObject globalObject;
@@ -189,6 +193,15 @@ namespace Jurassic
 
         //     PROPERTIES
         //_________________________________________________________________________________________
+
+        /// <summary>
+        /// Gets or sets a value end users can put into this ScriptEngine instance.
+        /// </summary>
+        public object UserData
+        {
+            get { return userData; }
+            set { userData = value; }
+        }
 
         /// <summary>
         /// Gets or sets a value that indicates whether to force ECMAScript 5 strict mode, even if
@@ -1366,6 +1379,142 @@ namespace Jurassic
                 if (this.staticTypeWrapperCache == null)
                     this.staticTypeWrapperCache = new Dictionary<Type, ClrStaticTypeWrapper>();
                 return this.staticTypeWrapperCache;
+            }
+        }
+
+        //     CLR EMBEDING HELPERS
+        //_________________________________________________________________________________________
+
+        public void EmbedGlobalClass(Type global)
+        {
+            Type funcType;
+            var methodInfos = global.GetMethods().Where(x => {
+                if (!x.IsPublic)
+                {
+                    return false;
+                }
+                return x.IsStatic;
+            });
+            foreach (var methodInfo in methodInfos)
+            {
+                List<Type> list = (
+                    from x in methodInfo.GetParameters()
+                    select x.ParameterType).ToList<Type>();
+                if (methodInfo.ReturnType != typeof(void))
+                {
+                    list.Add(methodInfo.ReturnType);
+                    funcType = System.Linq.Expressions.Expression.GetFuncType(list.ToArray());
+                }
+                else
+                {
+                    funcType = System.Linq.Expressions.Expression.GetActionType(list.ToArray());
+                }
+                Delegate @delegate = Delegate.CreateDelegate(funcType, null, methodInfo);
+                string name = methodInfo.Name;
+                JSFunctionAttribute customAttribute = (JSFunctionAttribute)Attribute.GetCustomAttribute(methodInfo, typeof(JSFunctionAttribute), false);
+                JSFunctionFlags flags = JSFunctionFlags.None;
+                if (customAttribute != null)
+                {
+                    if (!string.IsNullOrEmpty(customAttribute.Name))
+                    {
+                        name = customAttribute.Name;
+                    }
+                    flags = customAttribute.Flags;
+                }
+                this.SetGlobalValue(name, new ClrFunction(Function.InstancePrototype, @delegate, flags, name));
+                bool flag = true;
+                this.Global.DefineProperty(name, new Library.PropertyDescriptor(this.Global[name], Library.PropertyAttributes.Enumerable), flag);
+            }
+        }
+
+        public void EmbedStatic(string name, Type type)
+        {
+            if (!type.IsSubclassOf(typeof(ObjectInstance)))
+            {
+                throw new ArgumentException(string.Concat(type.FullName, " does not inherit from ObjectInstance"));
+            }
+            object[] objArray = new object[] { this };
+            object obj = Activator.CreateInstance(type, objArray);
+            bool flag = true;
+            this.Global.DefineProperty(name, new Library.PropertyDescriptor(obj, Library.PropertyAttributes.Enumerable), flag);
+        }
+
+        public void EmbedStatics(Type[] types)
+        {
+            Type[] typeArray = types;
+            for (int i = 0; i < (int)typeArray.Length; i++)
+            {
+                Type type = typeArray[i];
+                JSObjectAttribute customAttribute = (JSObjectAttribute)Attribute.GetCustomAttribute(type, typeof(JSObjectAttribute), false);
+                if (customAttribute != null)
+                {
+                    string name = customAttribute.Name;
+                    if (string.IsNullOrEmpty(name))
+                    {
+                        name = type.Name;
+                    }
+                    this.EmbedStatic(name, type);
+                }
+            }
+        }
+
+        public void EmbedInstance(string name, Type type)
+        {
+            if (!type.IsSubclassOf(typeof(ClrFunction)))
+            {
+                throw new ArgumentException(string.Concat(type.FullName, " does not inherit from ClrFunction"));
+            }
+            object[] objArray = new object[] { this };
+            this.SetGlobalValue(name, Activator.CreateInstance(type, objArray));
+        }
+
+        public void EmbedInstances(Type[] types)
+        {
+            Type[] typeArray = types;
+            for (int i = 0; i < (int)typeArray.Length; i++)
+            {
+                Type type = typeArray[i];
+                JSObjectAttribute customAttribute = (JSObjectAttribute)Attribute.GetCustomAttribute(type, typeof(JSObjectAttribute), false);
+                if (customAttribute != null)
+                {
+                    string name = customAttribute.Name;
+                    if (string.IsNullOrEmpty(name))
+                    {
+                        name = type.Name;
+                    }
+                    this.EmbedInstance(name, type);
+                }
+            }
+        }
+
+        public void EmbedObjectPrototype(string name, Type type)
+        {
+            if (!type.IsSubclassOf(typeof(ClrFunction)))
+            {
+                throw new ArgumentException(string.Concat(type.FullName, " does not inherit from ClrFunction"));
+            }
+            object[] objArray = new object[] { this };
+            object obj = Activator.CreateInstance(type, objArray);
+            bool flag = true;
+            this.Global.DefineProperty(name, new Library.PropertyDescriptor(obj, Library.PropertyAttributes.Enumerable), flag);
+        }
+
+        public void EmbedObjectPrototypes(Type[] types)
+        {
+            Type[] typeArray = types;
+            for (int i = 0; i < (int)typeArray.Length; i++)
+            {
+                Type type = typeArray[i];
+                JSObjectAttribute customAttribute = (JSObjectAttribute)Attribute.GetCustomAttribute(type, typeof(JSObjectAttribute), false);
+                if (customAttribute != null)
+                {
+                    string name = customAttribute.Name;
+                    if (string.IsNullOrEmpty(name))
+                    {
+                        name = type.Name;
+                    }
+                    this.EmbedObjectPrototype(name, type);
+                }
             }
         }
     }

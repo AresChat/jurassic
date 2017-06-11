@@ -214,4 +214,18 @@ namespace Jurassic.Library
     public sealed class JSFieldAttribute : Attribute
     {
     }
+
+    public sealed class JSObjectAttribute : Attribute
+    {
+        /// <summary>
+        /// The name of the object as exposed to Javascript
+        /// </summary>
+        public string Name { get; set; }
+
+
+        /// <summary>
+        /// Creates a default blank JSObjectAttribute
+        /// </summary>
+        public JSObjectAttribute() { }
+    }
 }
